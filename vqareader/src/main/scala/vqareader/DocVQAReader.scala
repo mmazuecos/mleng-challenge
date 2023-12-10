@@ -1,25 +1,35 @@
 package vqareader
 
+import org.apache.log4j.Logger
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import java.nio.file.{Files, Paths}
+import scala.util.Try
+import py4j.GatewayServer;
 
-object DocVQAReader {
 
-  // Define the UDF for loading images
-  val loadImage = udf((path: String) => {
-    try {
-      Files.readAllBytes(Paths.get(path))
-    } catch {
-      case e: Exception => Array[Byte]() // Return empty byte array in case of exception
-    }
-  })
+object DocVQAReader extends App{
 
-  private def getDirectoryFromPath(filePath: String): String = {
+  // Initialize the logger
+  val logger = Logger.getLogger(DocVQAReader.getClass)
+
+  def loadImage2(path: String, thing: String): Array[Byte] = {
+    Try(Files.readAllBytes(Paths.get(path))).getOrElse(Array[Byte]())
+  }
+
+  def show_me(): Unit = {
+    println("Hello from Scala!")
+  }
+
+  def getDirectoryFromPath(filePath: String): String = {
     new java.io.File(filePath).getParent
   }
 
   def readDataset(spark: SparkSession, path: String): DataFrame = {
+    // Not the best, just a workaround
+    val loadImage2UDF = udf(loadImage2 _)
+    spark.udf.register("loadImage2UDF", loadImage2UDF)
+
     val directory = getDirectoryFromPath(path)
 
     // Read the JSON file
@@ -46,10 +56,18 @@ object DocVQAReader {
         collect_list("answers").alias("answers"),
         first("image").alias("path")
       )
-      .withColumn("content", loadImage(concat(lit(directory), lit("/"), col("path"))))
+      .withColumn("content", loadImage2UDF(concat_ws("/", lit(directory), col("path")), lit("")))
       .withColumn("length", size(col("questions"))) // Add the length of the question list
       .withColumn("modificationTime", current_timestamp()) // Add the timestamp of the current time
 
-    groupedDf
+    // Select columns in the order specified in the schema
+    groupedDf.select(
+      col("path"),
+      col("modificationTime"),
+      col("length"),
+      col("content"),
+      col("questions"),
+      col("answers")
+    )
   }
 }

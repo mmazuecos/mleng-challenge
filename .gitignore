@@ -1,3 +1,6 @@
 *json
 *onnx
 *model
+**class
+**/__pycache__/*
+**/target/*
