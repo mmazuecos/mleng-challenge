@@ -35,6 +35,10 @@ object DocVQAReader extends App{
     // Read the JSON file
     val rawDf = spark.read.json(path)
 
+    // Check if certain columns exist
+    val hasAnswers = rawDf.columns.contains("answers")
+    val hasQuestionTypes = rawDf.columns.contains("question_types")
+
     // Assuming the 'data' field contains an array of records, you'll need to explode this array
     val explodedDf = rawDf.select(explode(col("data")))
 
@@ -42,12 +46,12 @@ object DocVQAReader extends App{
     val df = explodedDf.select(
       col("col.questionId"),
       col("col.question"),
-      col("col.question_types"),
+      if (hasQuestionTypes) col("col.question_types") else lit(null).alias("question_types"),
       col("col.image"),
       col("col.docId"),
-      col("col.answers"),
+      if (hasAnswers) col("col.answers") else lit(null).alias("answers"),
       col("col.data_split")
-    )
+    ).filter(_ != null)
 
     // Group by 'docId' and aggregate other fields
     val groupedDf = df.groupBy("docId")
